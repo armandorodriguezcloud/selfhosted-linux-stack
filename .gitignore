@@ -1,0 +1,12 @@
+﻿.env
+.env.local
+*.log
+__pycache__/
+*.pyc
+.venv/
+data/
+cache/
+config/
+*.tfstate
+.DS_Store
+Thumbs.db

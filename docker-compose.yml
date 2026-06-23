@@ -1,0 +1,202 @@
+# Self-hosted Linux application stack — the home-lab replica of the containerized
+# stack I run in production. A single Docker-managed Linux host fronts a suite of
+# services with Traefik (reverse proxy + TLS) over a shared PostgreSQL backend.
+#
+#   Traefik      reverse proxy / TLS termination
+#   Grafana      observability dashboards
+#   Synapse      Matrix homeserver  ┐ secure team comms
+#   Element      Matrix web client  ┘
+#   Wiki.js      documentation / knowledge base
+#   Zammad       request tracking (rails + scheduler + nginx)
+#   MobSF        mobile application security testing
+#   ops-bot      custom automation (Matrix -> Zammad)
+#
+x-restart: &restart unless-stopped
+
+networks:
+  web:        # public-facing, attached to Traefik
+  internal:   # service-to-service + database
+
+volumes:
+  postgres_data:
+  grafana_data:
+  synapse_data:
+  wikijs_data:
+  zammad_data:
+  mobsf_data:
+  traefik_certs:
+
+services:
+  traefik:
+    image: traefik:v3.1
+    restart: *restart
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.le.acme.tlschallenge=true"
+      - "--certificatesresolvers.le.acme.email=armando@armandorodriguez.cloud"
+      - "--certificatesresolvers.le.acme.storage=/certs/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik_certs:/certs
+    networks: [web]
+
+  postgres:
+    image: postgres:16-alpine
+    restart: *restart
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: *restart
+    networks: [internal]
+
+  memcached:
+    image: memcached:1.6-alpine
+    restart: *restart
+    command: memcached -m 256
+    networks: [internal]
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    restart: *restart
+    depends_on: [postgres]
+    environment:
+      GF_DATABASE_TYPE: postgres
+      GF_DATABASE_HOST: postgres:5432
+      GF_DATABASE_NAME: grafana
+      GF_DATABASE_USER: grafana
+      GF_DATABASE_PASSWORD: ${GRAFANA_DB_PASSWORD:-grafana}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-changeme}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks: [web, internal]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.grafana.rule: "Host(`grafana.lab.local`)"
+      traefik.http.routers.grafana.entrypoints: "websecure"
+      traefik.http.routers.grafana.tls.certresolver: "le"
+      traefik.http.services.grafana.loadbalancer.server.port: "3000"
+
+  synapse:
+    image: matrixdotorg/synapse:v1.110.0
+    restart: *restart
+    depends_on: [postgres]
+    environment:
+      SYNAPSE_SERVER_NAME: lab.local
+      SYNAPSE_REPORT_STATS: "no"
+    volumes:
+      - synapse_data:/data
+    networks: [web, internal]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.synapse.rule: "Host(`matrix.lab.local`)"
+      traefik.http.routers.synapse.entrypoints: "websecure"
+      traefik.http.routers.synapse.tls.certresolver: "le"
+      traefik.http.services.synapse.loadbalancer.server.port: "8008"
+
+  element:
+    image: vectorim/element-web:v1.11.70
+    restart: *restart
+    volumes:
+      - ./element/config.json:/app/config.json:ro
+    networks: [web]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.element.rule: "Host(`chat.lab.local`)"
+      traefik.http.routers.element.entrypoints: "websecure"
+      traefik.http.routers.element.tls.certresolver: "le"
+      traefik.http.services.element.loadbalancer.server.port: "80"
+
+  wikijs:
+    image: ghcr.io/requarks/wiki:2.5
+    restart: *restart
+    depends_on: [postgres]
+    environment:
+      DB_TYPE: postgres
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: wikijs
+      DB_PASS: ${WIKIJS_DB_PASSWORD:-wikijs}
+      DB_NAME: wikijs
+    volumes:
+      - wikijs_data:/wiki/data
+    networks: [web, internal]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.wikijs.rule: "Host(`wiki.lab.local`)"
+      traefik.http.routers.wikijs.entrypoints: "websecure"
+      traefik.http.routers.wikijs.tls.certresolver: "le"
+      traefik.http.services.wikijs.loadbalancer.server.port: "3000"
+
+  zammad-railsserver:
+    image: zammad/zammad-docker-compose:6.4
+    restart: *restart
+    depends_on: [postgres, redis, memcached]
+    environment: &zammad-env
+      POSTGRESQL_HOST: postgres
+      POSTGRESQL_USER: zammad
+      POSTGRESQL_PASS: ${ZAMMAD_DB_PASSWORD:-zammad}
+      POSTGRESQL_DB: zammad
+      REDIS_URL: redis://redis:6379
+      MEMCACHE_SERVERS: memcached:11211
+    volumes:
+      - zammad_data:/opt/zammad
+    networks: [internal]
+
+  zammad-scheduler:
+    image: zammad/zammad-docker-compose:6.4
+    restart: *restart
+    command: ["zammad-scheduler"]
+    depends_on: [zammad-railsserver]
+    environment: *zammad-env
+    volumes:
+      - zammad_data:/opt/zammad
+    networks: [internal]
+
+  zammad-nginx:
+    image: zammad/zammad-docker-compose:6.4
+    restart: *restart
+    command: ["zammad-nginx"]
+    depends_on: [zammad-railsserver]
+    volumes:
+      - zammad_data:/opt/zammad
+    networks: [web, internal]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.zammad.rule: "Host(`support.lab.local`)"
+      traefik.http.routers.zammad.entrypoints: "websecure"
+      traefik.http.routers.zammad.tls.certresolver: "le"
+      traefik.http.services.zammad.loadbalancer.server.port: "8080"
+
+  mobsf:
+    image: opensecurity/mobile-security-framework-mobsf:latest
+    restart: *restart
+    volumes:
+      - mobsf_data:/home/mobsf/.MobSF
+    networks: [web]
+    labels:
+      traefik.enable: "true"
+      traefik.http.routers.mobsf.rule: "Host(`mobsf.lab.local`)"
+      traefik.http.routers.mobsf.entrypoints: "websecure"
+      traefik.http.routers.mobsf.tls.certresolver: "le"
+      traefik.http.services.mobsf.loadbalancer.server.port: "8000"
+
+  ops-bot:
+    build: ./bot
+    restart: *restart
+    env_file: .env
+    depends_on: [synapse, zammad-nginx]
+    networks: [internal]
