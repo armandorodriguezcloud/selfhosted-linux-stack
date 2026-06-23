@@ -1,6 +1,6 @@
 # Architecture
 
-This is a personal testing lab — a sandbox where I get hands-on with a
+This is a personal testing lab, a sandbox where I get hands-on with a
 multi-service containerized stack. It is **not production and does not replicate
 a production environment**. It is intentionally multi-service so I can practice
 the operational concerns I care about: reverse-proxy routing, TLS, a shared
@@ -37,18 +37,18 @@ database with per-service isolation, network segmentation, automation, and backu
 
 ## Operations
 
-- **Backups** — volumes + `pg_dump` per database on a nightly schedule
+- **Backups**, volumes + `pg_dump` per database on a nightly schedule
   (the dedicated [backup-dr-lab](https://github.com/armandorodriguezcloud/backup-dr-lab)
   repo covers the PBS/Veeam side).
-- **Monitoring** — Grafana here is the in-stack dashboard layer; cluster-wide
+- **Monitoring**, Grafana here is the in-stack dashboard layer; cluster-wide
   metrics live in
   [observability-stack](https://github.com/armandorodriguezcloud/observability-stack).
-- **Upgrades** — image tags are pinned; bump + `docker compose up -d` per
+- **Upgrades**, image tags are pinned; bump + `docker compose up -d` per
   service, validating health before moving on.
 
 ## Why it's built this way
 
-These are the patterns I want hands-on reps with — a reverse proxy in front of
+These are the patterns I want hands-on reps with, a reverse proxy in front of
 containerized services, centralized TLS, isolated data stores, and custom
 automation. It's a learning environment to go deeper on my own time, not a
 production system.

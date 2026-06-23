@@ -1,4 +1,4 @@
-# Self-hosted Linux application stack — the home-lab replica of the containerized
+# Self-hosted Linux application stack, the home-lab replica of the containerized
 # stack I run in production. A single Docker-managed Linux host fronts a suite of
 # services with Traefik (reverse proxy + TLS) over a shared PostgreSQL backend.
 #

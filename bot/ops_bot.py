@@ -1,5 +1,5 @@
 """
-ops-bot — a small Matrix automation bot for the self-hosted stack.
+ops-bot, a small Matrix automation bot for the self-hosted stack.
 
 Listens in a Matrix room; when a user types `!ticket <subject> | <body>`,
 it opens a request in Zammad via the REST API and replies with the number.
