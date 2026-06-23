@@ -16,14 +16,14 @@ environment, **not production, and not a copy of any production system**.
 
 | Service        | Role                                   | Hostname               |
 |----------------|----------------------------------------|------------------------|
-| Traefik        | Reverse proxy + Let's Encrypt TLS      |,                      |
+| Traefik        | Reverse proxy + Let's Encrypt TLS      | n/a                    |
 | Grafana        | Observability dashboards               | `grafana.lab.local`    |
 | Synapse        | Matrix homeserver (secure comms)       | `matrix.lab.local`     |
 | Element        | Matrix web client                      | `chat.lab.local`       |
 | Wiki.js        | Documentation / knowledge base         | `wiki.lab.local`       |
 | Zammad         | Request tracking (rails + scheduler)   | `support.lab.local`    |
 | MobSF          | Mobile application security testing    | `mobsf.lab.local`      |
-| ops-bot        | Custom Matrix → Zammad automation      |,                      |
+| ops-bot        | Custom Matrix to Zammad automation     | n/a                    |
 | PostgreSQL     | Shared database backend                | internal               |
 | Redis / Memcached | Zammad caching + jobs               | internal               |
 
